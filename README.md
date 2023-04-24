@@ -10,6 +10,7 @@ In place of the research cost will be a research cost and chance notice.
 
 The sounds are the same so it won't be a huge shock.
 
+WORK IN PROGRESS.  IT'S CLOSE BUT NO CIGAR YET.
 
 ## Configuration
 ```json
