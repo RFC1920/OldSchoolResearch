@@ -1,6 +1,6 @@
 ﻿#region License (GPL v2)
 /*
-    DESCRIPTION
+    Old School Research
     Copyright (c) 2023 RFC1920 <desolationoutpostpve@gmail.com>
 
     program is free software; you can redistribute it and/or
@@ -32,7 +32,7 @@ using VLB;
 namespace Oxide.Plugins
 {
     [Info("Old School Research", "RFC1920", "1.0.3")]
-    [Description("")]
+    [Description("Research with a chance of success instead of certainty")]
     internal class OldSchoolResearch : RustPlugin
     {
         private ConfigData configData;
@@ -48,11 +48,7 @@ namespace Oxide.Plugins
         private Dictionary<uint, ulong> rsloot = new Dictionary<uint, ulong>();
         private Dictionary<ulong, Timer> rstimer = new Dictionary<ulong, Timer>();
 
-        #region Message
         private string Lang(string key, string id = null, params object[] args) => string.Format(lang.GetMessage(key, this, id), args);
-        private void Message(IPlayer player, string key, params object[] args) => player.Message(Lang(key, player.Id, args));
-        private void LMessage(IPlayer player, string key, params object[] args) => player.Reply(Lang(key, player.Id, args));
-        #endregion
 
         protected override void LoadDefaultMessages()
         {
@@ -80,8 +76,6 @@ namespace Oxide.Plugins
                 if (ent != null && ent is ResearchTable)
                 {
                     ResearchTable rst = ent as ResearchTable;
-                    //UnityEngine.Object.Destroy(rst?.gameObject.GetComponent<ResearchTableMod>());
-                    //rst?.gameObject?.AddComponent<ResearchTableMod>();
                     rst?.gameObject?.GetOrAddComponent<ResearchTableMod>();
                     rst?.SetActive(true);
                 }
@@ -144,7 +138,6 @@ namespace Oxide.Plugins
             if (rsloot.ContainsKey(rst.net.ID)) return null;
             rsloot.Add(rst.net.ID, player.userID);
 
-            // rtm.OpenContainer(player);
             Item item = rst.inventory.GetSlot(0);
             Item currency = rst.inventory.GetSlot(1);
             if (item != null)
@@ -202,18 +195,6 @@ namespace Oxide.Plugins
             }
         }
 
-        //private object CanResearchItem(BasePlayer player, Item item)
-        //{
-        //    if (player == null) return null;
-        //    if (item == null) return null;
-        //    if (player.blueprints.HasUnlocked(item.info))
-        //    {
-        //        return true;
-        //    }
-        //    canres.Add(player.userID);
-        //    return null;
-        //}
-
         private void OnLootEntityEnd(BasePlayer player, BaseCombatEntity entity)
         {
             if (player == null) return;
@@ -221,7 +202,7 @@ namespace Oxide.Plugins
             ResearchTableMod rtm = entity.GetComponent<ResearchTableMod>();
             if (rtm == null) return;
             rtm?.DeactivatePlayer();
-            // This setup is causing occaisional continuance of the GUI when looting the RT has ended...
+
             ulong networkID;
             if (entity == null || !rsloot.TryGetValue(entity.net.ID, out networkID))
             {
@@ -272,7 +253,7 @@ namespace Oxide.Plugins
             DoLog($"Calling item loaded on {rtm.table.net.ID} for player {player?.displayName}");
             if (player != null)
             {
-                if (item.info.name == configData.currency && targetPos == 1) // FIXME
+                if (item.info.name == configData.currency && targetPos == 1)
                 {
                     item.MoveToContainer(container, 1);
                     container.MarkDirty();
@@ -311,25 +292,6 @@ namespace Oxide.Plugins
             }
             return null;
         }
-        //    Puts($"Finding container {targetContainer}");
-        //    ItemContainer container = playerLoot.FindContainer(targetContainer);
-
-        //    Puts($"Finding rt");
-        //    ResearchTable r = container?.entityOwner as ResearchTable;
-        //    Puts("Finding rtm");
-        //    var rtm = r.GetComponent<ResearchTableMod>();
-        //    // Update cost based on loaded item
-        //    Puts("Calling item loaded");
-        //    //rtm?.ItemLoaded(player, rtm.table.net.ID);
-        //    return null;
-        //}
-
-        //private void OnEntitySpawned(ResearchTable table)
-        //{
-        //    Puts("OES WORKS");
-        //        table.researchResource = ItemManager.FindItemDefinition("ducttape");
-        //    Puts(table.researchResource.displayName.english);
-        //}
 
         private void SaveData()
         {
@@ -400,7 +362,6 @@ namespace Oxide.Plugins
             Config.WriteObject(config, true);
         }
 
-        // HERE
         public class ResearchTableMod : FacepunchBehaviour
         {
             private StorageContainer parent;
@@ -426,10 +387,8 @@ namespace Oxide.Plugins
             {
                 if (!table.IsOpen())
                 {
-                    //Instance.Puts("NOT OPEN");
                     return;
                 }
-                //Instance.Puts("TABLE OPEN");
 
                 if (table.IsResearching())
                 {
@@ -451,11 +410,10 @@ namespace Oxide.Plugins
                         Instance.DoLog($"Creating BP for {ResearchItem.info.name}");
                         Item newbp = ItemManager.CreateByName("blueprintbase");
                         newbp.blueprintTarget = ResearchItem.info.itemid;
-                        //ResearchItem.RemoveFromContainer();
+
                         table?.inventory.GetSlot(0).RemoveFromContainer();
                         newbp.MoveToContainer(table.inventory, 0);
                         Chance = 0;
-                        //table.EndResearch();
                     }
                     else if (table.researchFailEffect.isValid)
                     {
@@ -493,8 +451,6 @@ namespace Oxide.Plugins
                         ResearchCost = GetResearchCost(ResearchItem);
                     }
 
-                    //Instance.DoLog($"Researching {ResearchItem.info.displayName.english}");
-                    //basePlayer.inventory.loot.SendImmediate();
                     ResearchReady();
                     return;
                 }
@@ -519,7 +475,6 @@ namespace Oxide.Plugins
                 researchActive = true;
                 Instance.timer.Once(10f, () => researchComplete = true);
 
-                // HERE
                 Instance.DoLog($"Chance of success is {Chance}");
             }
 
