@@ -31,7 +31,7 @@ using VLB;
 
 namespace Oxide.Plugins
 {
-    [Info("Old School Research", "RFC1920", "1.0.2")]
+    [Info("Old School Research", "RFC1920", "1.0.3")]
     [Description("")]
     internal class OldSchoolResearch : RustPlugin
     {
@@ -113,6 +113,7 @@ namespace Oxide.Plugins
 
                             DoLog("Trying to begin research routine");
                             rtm.BeginResearch();
+                            RsGUI(player.Object as BasePlayer, tableId);
                             return;
                         }
                         DoLog("No item present");
@@ -217,6 +218,9 @@ namespace Oxide.Plugins
         {
             if (player == null) return;
             if (!(entity is ResearchTable)) return;
+            ResearchTableMod rtm = entity.GetComponent<ResearchTableMod>();
+            if (rtm == null) return;
+            rtm?.DeactivatePlayer();
             // This setup is causing occaisional continuance of the GUI when looting the RT has ended...
             ulong networkID;
             if (entity == null || !rsloot.TryGetValue(entity.net.ID, out networkID))
@@ -273,7 +277,10 @@ namespace Oxide.Plugins
                     item.MoveToContainer(container, 1);
                     container.MarkDirty();
                 }
-                NextTick(() => rtm?.ItemLoaded(player, r.net.ID));
+                if (player != null)
+                {
+                    NextTick(() => rtm?.ItemLoaded(player, r.net.ID));
+                }
             }
             return null;
         }
@@ -288,13 +295,19 @@ namespace Oxide.Plugins
             {
                 Puts($"{player.displayName} moving {item.info.name} from {sourceContainer?.ShortPrefabName}");
                 ResearchTableMod rtm = sourceContainer.GetComponent<ResearchTableMod>();
-                NextTick(() => rtm?.ItemLoaded(player, sourceContainer.net.ID));
+                if (player != null)
+                {
+                    NextTick(() => rtm?.ItemLoaded(player, sourceContainer.net.ID));
+                }
             }
             else if (targetContainer != null && targetContainer is ResearchTable)
             {
                 Puts($"{player.displayName} moving {item.info.name} to {targetContainer?.ShortPrefabName}");
                 ResearchTableMod rtm = targetContainer.GetComponent<ResearchTableMod>();
-                NextTick(() => rtm?.ItemLoaded(player, targetContainer.net.ID));
+                if (player != null)
+                {
+                    NextTick(() => rtm?.ItemLoaded(player, targetContainer.net.ID));
+                }
             }
             return null;
         }
@@ -357,7 +370,6 @@ namespace Oxide.Plugins
 
         private class ConfigData
         {
-            //public Options Options;
             public bool debug;
             public string currency;
             public VersionNumber Version;
@@ -393,6 +405,7 @@ namespace Oxide.Plugins
         {
             private StorageContainer parent;
             public ResearchTable table;
+            public BasePlayer activePlayer;
             private Item ResearchItem;
             public int ResearchCost;
             private int Currency;
@@ -407,111 +420,6 @@ namespace Oxide.Plugins
                 parent = table?.gameObject.GetComponent<StorageContainer>();
                 random = new System.Random();
                 table.researchResource = ItemManager.FindItemDefinition(Instance.configData.currency);
-            }
-
-            public void ItemLoaded(BasePlayer player, uint rst)
-            {
-                Instance.DoLog($"ItemLoaded called for player {player?.displayName} on table {rst}");
-                ResearchItem = table?.inventory.GetSlot(0);
-                Instance.DoLog($"Got type {ResearchItem?.GetType()}");
-                Instance.DoLog($"Calculating cost for {ResearchItem?.info.name}");
-                if (!table.IsItemResearchable(ResearchItem)) return;
-
-                // Check currency slot
-                if (table?.inventory.GetSlot(1) == null)
-                {
-                    Currency = 0;
-                }
-                else
-                {
-                    Currency = table.inventory.GetSlot(1).amount;
-                    Instance.DoLog($"Currency == {Currency}");
-                    Chance = 1;
-                }
-
-                if (ResearchItem != null)
-                {
-                    ResearchCost = GetResearchCost(ResearchItem);
-                }
-
-                Chance = (int)Math.Abs((float)((double)Currency / (double)ResearchCost * 100));
-                if (Chance > 100) Chance = 100;
-                Instance.DoLog($"Reload GUI with ResearchCost of {ResearchCost}, Currency of {Currency}, and chance of {Chance}%");
-                Instance.RsGUI(player, rst);
-            }
-
-            public void BeginResearch()
-            {
-                if (table?.inventory.GetSlot(0) != null && table?.inventory.GetSlot(1) != null && !researchActive)
-                {
-                    ResearchItem = table?.inventory.GetSlot(0);
-                    if (!table.IsItemResearchable(ResearchItem)) return;
-
-                    // Check currency slot
-                    if (table?.inventory.GetSlot(1) != null)
-                    {
-                        Currency = table.inventory.GetSlot(1).amount;
-                    }
-
-                    if (Currency > 0)
-                    {
-                        ResearchCost = GetResearchCost(ResearchItem);
-                    }
-
-                    //Instance.DoLog($"Researching {ResearchItem.info.displayName.english}");
-                    //basePlayer.inventory.loot.SendImmediate();
-                    RealResearch();
-                    return;
-                }
-                Instance.DoLog("Research slot was empty or research already in progress");
-            }
-
-            private int GetResearchCost(Item item)
-            {
-                if (item.info.rarity == Rarity.Common)
-                {
-                    ResearchCost = 20;
-                }
-                if (item.info.rarity == Rarity.Uncommon)
-                {
-                    ResearchCost = 75;
-                }
-                if (item.info.rarity == Rarity.Rare)
-                {
-                    ResearchCost = 125;
-                }
-                if (item.info.rarity == Rarity.VeryRare || item.info.rarity == Rarity.None)
-                {
-                    ResearchCost = 500;
-                }
-                ItemBlueprint itemBlueprint = ItemManager.FindBlueprint(item.info);
-                if (itemBlueprint?.defaultBlueprint == true)
-                {
-                    return ConVar.Server.defaultBlueprintResearchCost;
-                }
-                return ResearchCost;
-            }
-
-            public void RealResearch()
-            {
-                if (table.researchStartEffect.isValid)
-                {
-                    Effect.server.Run(table.researchStartEffect.resourcePath, parent, 0, Vector3.zero, Vector3.zero, null, false);
-                }
-                table.researchFinishedTime = UnityEngine.Time.realtimeSinceStartup + table.researchDuration;
-                parent.Invoke(new Action(table.ResearchAttemptFinished), table.researchDuration);
-
-                Instance.DoLog($"Researching {ResearchItem.info.name} for {Currency} {table.researchResource.name}");
-                parent.inventory.SetLocked(true);
-                parent.SetFlag(BaseEntity.Flags.On, true, false, true);
-                parent.SendNetworkUpdate(BasePlayer.NetworkQueue.Update);
-
-                researchComplete = false;
-                researchActive = true;
-                Instance.timer.Once(10f, () => researchComplete = true);
-
-                // HERE
-                Instance.DoLog($"Chance of success is {Chance}");
             }
 
             public void FixedUpdate()
@@ -553,9 +461,124 @@ namespace Oxide.Plugins
                     {
                         Instance.DoLog("FAILED!");
                         Effect.server.Run(table.researchFailEffect.resourcePath, parent, 0, Vector3.zero, Vector3.zero, null, false);
+                        if (activePlayer != null)
+                        {
+                            Instance.RsGUI(activePlayer, table.net.ID, null, true);
+                        }
                     }
                     table?.inventory.GetSlot(1)?.RemoveFromContainer();
                 }
+            }
+
+            public void DeactivatePlayer()
+            {
+                activePlayer = null;
+            }
+
+            public void BeginResearch()
+            {
+                if (table?.inventory.GetSlot(0) != null && table?.inventory.GetSlot(1) != null && !researchActive)
+                {
+                    ResearchItem = table?.inventory.GetSlot(0);
+                    if (!table.IsItemResearchable(ResearchItem)) return;
+
+                    // Check currency slot
+                    if (table?.inventory.GetSlot(1) != null)
+                    {
+                        Currency = table.inventory.GetSlot(1).amount;
+                    }
+
+                    if (Currency > 0)
+                    {
+                        ResearchCost = GetResearchCost(ResearchItem);
+                    }
+
+                    //Instance.DoLog($"Researching {ResearchItem.info.displayName.english}");
+                    //basePlayer.inventory.loot.SendImmediate();
+                    ResearchReady();
+                    return;
+                }
+                Instance.DoLog("Research slot was empty or research already in progress");
+            }
+
+            public void ResearchReady()
+            {
+                if (table.researchStartEffect.isValid)
+                {
+                    Effect.server.Run(table.researchStartEffect.resourcePath, parent, 0, Vector3.zero, Vector3.zero, null, false);
+                }
+                table.researchFinishedTime = Time.realtimeSinceStartup + table.researchDuration;
+                parent.Invoke(new Action(table.ResearchAttemptFinished), table.researchDuration);
+
+                Instance.DoLog($"Researching {ResearchItem.info.name} for {Currency} {table.researchResource.name}");
+                parent.inventory.SetLocked(true);
+                parent.SetFlag(BaseEntity.Flags.On, true, false, true);
+                parent.SendNetworkUpdate(BasePlayer.NetworkQueue.Update);
+
+                researchComplete = false;
+                researchActive = true;
+                Instance.timer.Once(10f, () => researchComplete = true);
+
+                // HERE
+                Instance.DoLog($"Chance of success is {Chance}");
+            }
+
+            public void ItemLoaded(BasePlayer player, uint rst)
+            {
+                Instance.DoLog($"ItemLoaded called for player {player?.displayName} on table {rst}");
+                activePlayer = player;
+                ResearchItem = table?.inventory.GetSlot(0);
+                Instance.DoLog($"Got type {ResearchItem?.GetType()}");
+                Instance.DoLog($"Calculating cost for {ResearchItem?.info.name}");
+                if (!table.IsItemResearchable(ResearchItem)) return;
+
+                // Check currency slot
+                if (table?.inventory.GetSlot(1) == null)
+                {
+                    Currency = 0;
+                }
+                else
+                {
+                    Currency = table.inventory.GetSlot(1).amount;
+                    Instance.DoLog($"Currency == {Currency}");
+                    Chance = 1;
+                }
+
+                if (ResearchItem != null)
+                {
+                    ResearchCost = GetResearchCost(ResearchItem);
+                }
+
+                Chance = (int)Math.Abs((float)((double)Currency / (double)ResearchCost * 100));
+                if (Chance > 100) Chance = 100;
+                Instance.DoLog($"Reload GUI with ResearchCost of {ResearchCost}, Currency of {Currency}, and chance of {Chance}%");
+                Instance.RsGUI(player, rst);
+            }
+
+            private int GetResearchCost(Item item)
+            {
+                if (item.info.rarity == Rarity.Common)
+                {
+                    ResearchCost = 20;
+                }
+                if (item.info.rarity == Rarity.Uncommon)
+                {
+                    ResearchCost = 75;
+                }
+                if (item.info.rarity == Rarity.Rare)
+                {
+                    ResearchCost = 125;
+                }
+                if (item.info.rarity == Rarity.VeryRare || item.info.rarity == Rarity.None)
+                {
+                    ResearchCost = 500;
+                }
+                ItemBlueprint itemBlueprint = ItemManager.FindBlueprint(item.info);
+                if (itemBlueprint?.defaultBlueprint == true)
+                {
+                    return ConVar.Server.defaultBlueprintResearchCost;
+                }
+                return ResearchCost;
             }
         }
 
