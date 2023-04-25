@@ -18,29 +18,20 @@
     Optionally you can also view the license at <http://www.gnu.org/licenses/>.
 */
 #endregion License Information (GPL v2)
-using ConVar;
 using Facepunch;
-using Network;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
-using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
-using Oxide.Game.Rust.Libraries;
 using Rust;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.Assertions;
-using UnityEngine.Rendering;
 using VLB;
 
 namespace Oxide.Plugins
 {
-    [Info("Old School Research", "RFC1920", "1.0.1")]
+    [Info("Old School Research", "RFC1920", "1.0.2")]
     [Description("")]
     internal class OldSchoolResearch : RustPlugin
     {
@@ -161,18 +152,7 @@ namespace Oxide.Plugins
                 rstimer.Remove(player.userID);
                 rstimer.Add(player.userID, timer.Every(0.5f, () => CheckLooting(player)));
                 rtm.ItemLoaded(player, rst.net.ID);
-                return null;
             }
-            if (currency != null)
-            {
-                rtm.CurrencyLoaded(player, rst.net.ID);
-            }
-            //if (!rstimer.ContainsKey(player.userID))
-            //{
-            //    DoLog($"Creating CheckLooting timer for {player.displayName}");
-            //    rstimer.Add(player.userID, timer.Every(0.5f, () => CheckLooting(player)));
-            //    RsGUI(player, rst.net.ID);
-            //}
 
             return null;
         }
@@ -283,6 +263,7 @@ namespace Oxide.Plugins
             ResearchTable r = container?.entityOwner as ResearchTable;
             ResearchTableMod rtm = r?.GetComponent<ResearchTableMod>();
             if (rtm == null) return null;
+            DoLog("CanAcceptItem called");
             BasePlayer player = item.GetOwnerPlayer();
             DoLog($"Calling item loaded on {rtm.table.net.ID} for player {player?.displayName}");
             if (player != null)
@@ -291,18 +272,32 @@ namespace Oxide.Plugins
                 {
                     item.MoveToContainer(container, 1);
                     container.MarkDirty();
-                    NextTick(() => rtm?.CurrencyLoaded(player, r.net.ID));
                 }
                 NextTick(() => rtm?.ItemLoaded(player, r.net.ID));
             }
             return null;
         }
 
-        //private object CanMoveItem(Item item, PlayerInventory playerLoot, uint targetContainer, int targetSlot, int amount)
-        //{
-        //    BasePlayer player = playerLoot.GetComponent<BasePlayer>();
-        //    Puts(player.displayName);
+        private object CanMoveItem(Item item, PlayerInventory playerLoot, uint targetContainerID, int targetSlot, int amount)
+        {
+            BasePlayer player = playerLoot.GetComponent<BasePlayer>();
+            BaseEntity sourceContainer = item.GetEntityOwner();
+            BaseNetworkable targetContainer = BaseNetworkable.serverEntities.Find(targetContainerID);
 
+            if (sourceContainer != null && sourceContainer is ResearchTable)
+            {
+                Puts($"{player.displayName} moving {item.info.name} from {sourceContainer?.ShortPrefabName}");
+                ResearchTableMod rtm = sourceContainer.GetComponent<ResearchTableMod>();
+                NextTick(() => rtm?.ItemLoaded(player, sourceContainer.net.ID));
+            }
+            else if (targetContainer != null && targetContainer is ResearchTable)
+            {
+                Puts($"{player.displayName} moving {item.info.name} to {targetContainer?.ShortPrefabName}");
+                ResearchTableMod rtm = targetContainer.GetComponent<ResearchTableMod>();
+                NextTick(() => rtm?.ItemLoaded(player, targetContainer.net.ID));
+            }
+            return null;
+        }
         //    Puts($"Finding container {targetContainer}");
         //    ItemContainer container = playerLoot.FindContainer(targetContainer);
 
@@ -416,37 +411,18 @@ namespace Oxide.Plugins
 
             public void ItemLoaded(BasePlayer player, uint rst)
             {
-                Instance.DoLog($"ItemLoaded called for player {player.displayName} on table {rst}");
+                Instance.DoLog($"ItemLoaded called for player {player?.displayName} on table {rst}");
                 ResearchItem = table?.inventory.GetSlot(0);
-                Instance.DoLog($"Got type {ResearchItem.GetType()}");
+                Instance.DoLog($"Got type {ResearchItem?.GetType()}");
                 Instance.DoLog($"Calculating cost for {ResearchItem?.info.name}");
                 if (!table.IsItemResearchable(ResearchItem)) return;
 
                 // Check currency slot
-                if (table?.inventory.GetSlot(1) != null)
+                if (table?.inventory.GetSlot(1) == null)
                 {
-                    Currency = table.inventory.GetSlot(1).amount;
-                    Instance.DoLog($"Currency == {Currency}");
+                    Currency = 0;
                 }
                 else
-                {
-                    Chance = 0;
-                }
-
-                ResearchCost = GetResearchCost(ResearchItem);
-
-                Chance = (int)Math.Abs((float)((double)Currency / (double)ResearchCost * 100));
-                if (Chance > 100) Chance = 100;
-                Instance.DoLog($"Reload GUI with ResearchCost of {ResearchCost}, Currency of {Currency}, and chance of {Chance}%");
-                Instance.RsGUI(player, rst);
-            }
-
-            public void CurrencyLoaded(BasePlayer player, uint rst)
-            {
-                Instance.DoLog($"CurrencyLoaded called for player {player.displayName} on table {rst}");
-
-                // Check currency slot
-                if (table?.inventory.GetSlot(1) != null)
                 {
                     Currency = table.inventory.GetSlot(1).amount;
                     Instance.DoLog($"Currency == {Currency}");
