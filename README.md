@@ -8,7 +8,7 @@ A player will insert the item and the currency item, whether scrap or ducttape, 
 
 In place of the research cost will be a research cost and chance notice.
 
-The sounds are the same so it won't be a huge shock.
+The sounds are the same so it won't be a huge shock.  However, since they moved to using scrap, the GUI would not let you research unless you had 100% of the requirement.  So, it's probably been awhile since you heard the breakage sound on failure.
 
 ## Configuration
 ```json
