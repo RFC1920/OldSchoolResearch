@@ -29,9 +29,10 @@ using System.Globalization;
 using UnityEngine;
 using VLB;
 
+
 namespace Oxide.Plugins
 {
-    [Info("Old School Research", "RFC1920", "1.0.3")]
+    [Info("Old School Research", "RFC1920", "1.0.4")]
     [Description("Research with a chance of success instead of certainty")]
     internal class OldSchoolResearch : RustPlugin
     {
@@ -72,7 +73,7 @@ namespace Oxide.Plugins
             foreach (uint table in tables)
             {
                 DoLog($"Activating table {table}");
-                BaseNetworkable ent = BaseNetworkable.serverEntities.Find(table);
+                BaseNetworkable ent = BaseNetworkable.serverEntities.Find(new NetworkableId(table));
                 if (ent != null && ent is ResearchTable)
                 {
                     ResearchTable rst = ent as ResearchTable;
@@ -91,7 +92,7 @@ namespace Oxide.Plugins
                 uint tableId = uint.Parse(args[0]);
                 if (tables.Contains(tableId))
                 {
-                    ResearchTableMod rtm = BaseNetworkable.serverEntities.Find(tableId).GetComponent<ResearchTableMod>();
+                    ResearchTableMod rtm = BaseNetworkable.serverEntities.Find(new NetworkableId(tableId)).GetComponent<ResearchTableMod>();
                     if (rtm != null)
                     {
                         ResearchTable rt = rtm.GetComponent<ResearchTable>();
@@ -121,9 +122,9 @@ namespace Oxide.Plugins
             ResearchTableMod rtm = entity.GetComponent<ResearchTableMod>();
             if (rtm == null) return true;
             DoLog("CanPickupEntity called on RTM");
-            if (tables.Contains(entity.net.ID))
+            if (tables.Contains((uint)entity.net.ID.Value))
             {
-                tables.Remove(entity.net.ID);
+                tables.Remove((uint)entity.net.ID.Value);
                 SaveData();
             }
             return true;
@@ -135,8 +136,8 @@ namespace Oxide.Plugins
             ResearchTableMod rtm = rst.GetComponent<ResearchTableMod>();
             if (rtm == null) return null;
 
-            if (rsloot.ContainsKey(rst.net.ID)) return null;
-            rsloot.Add(rst.net.ID, player.userID);
+            if (rsloot.ContainsKey((uint)rst.net.ID.Value)) return null;
+            rsloot.Add((uint)rst.net.ID.Value, player.userID);
 
             Item item = rst.inventory.GetSlot(0);
             Item currency = rst.inventory.GetSlot(1);
@@ -145,7 +146,7 @@ namespace Oxide.Plugins
                 DoLog($"Creating CheckLooting timer for {player.displayName}");
                 rstimer.Remove(player.userID);
                 rstimer.Add(player.userID, timer.Every(0.5f, () => CheckLooting(player)));
-                rtm.ItemLoaded(player, rst.net.ID);
+                rtm.ItemLoaded(player, (uint)rst.net.ID.Value);
             }
 
             return null;
@@ -160,7 +161,7 @@ namespace Oxide.Plugins
             DoLog($"GUI opened for table {rst}");
             CuiElementContainer container = UI.Container(OSRGUI, UI.Color("3E3C37", 1f), "0.85 0.405", "0.9465 0.515", false, "Overlay");
 
-            ResearchTable rt = BaseNetworkable.serverEntities.Find(rst) as ResearchTable;
+            ResearchTable rt = BaseNetworkable.serverEntities.Find(new NetworkableId(rst)) as ResearchTable;
             ResearchTableMod rtm = rt?.gameObject.GetComponent<ResearchTableMod>();
 
             UI.Label(ref container, OSRGUI, UI.Color("#DDDDDD", 1f), Lang("cost", null, rtm?.ResearchCost.ToString()), 22, "0 0.5", "1 1");
@@ -204,7 +205,7 @@ namespace Oxide.Plugins
             rtm?.DeactivatePlayer();
 
             ulong networkID;
-            if (entity == null || !rsloot.TryGetValue(entity.net.ID, out networkID))
+            if (entity == null || !rsloot.TryGetValue((uint)entity.net.ID.Value, out networkID))
             {
                 return;
             }
@@ -215,9 +216,9 @@ namespace Oxide.Plugins
                 CuiHelper.DestroyUi(player, OSRGUI2);
                 CuiHelper.DestroyUi(player, OSRGUI3);
 
-                if (rsloot.ContainsKey(entity.net.ID))
+                if (rsloot.ContainsKey((uint)entity.net.ID.Value))
                 {
-                    rsloot.Remove(entity.net.ID);
+                    rsloot.Remove((uint)entity.net.ID.Value);
                 }
                 if (canres.Contains(player.userID))
                 {
@@ -238,7 +239,7 @@ namespace Oxide.Plugins
                 DoLog("OEB");
                 table.researchResource = ItemManager.FindItemDefinition(configData.currency);
                 go.GetOrAddComponent<ResearchTableMod>();
-                if (!tables.Contains(table.net.ID)) tables.Add(table.net.ID);
+                if (!tables.Contains((uint)table.net.ID.Value)) tables.Add((uint)table.net.ID.Value);
                 SaveData();
             }
         }
@@ -260,17 +261,17 @@ namespace Oxide.Plugins
                 }
                 if (player != null)
                 {
-                    NextTick(() => rtm?.ItemLoaded(player, r.net.ID));
+                    NextTick(() => rtm?.ItemLoaded(player, (uint)r.net.ID.Value));
                 }
             }
             return null;
         }
 
-        private object CanMoveItem(Item item, PlayerInventory playerLoot, uint targetContainerID, int targetSlot, int amount)
+        private object CanMoveItem(Item item, PlayerInventory playerLoot, ItemContainerId targetContainerID, int targetSlot, int amount)
         {
             BasePlayer player = playerLoot.GetComponent<BasePlayer>();
             BaseEntity sourceContainer = item.GetEntityOwner();
-            BaseNetworkable targetContainer = BaseNetworkable.serverEntities.Find(targetContainerID);
+            BaseNetworkable targetContainer = BaseNetworkable.serverEntities.Find(new NetworkableId(targetContainerID.Value));
 
             if (sourceContainer != null && sourceContainer is ResearchTable)
             {
@@ -278,7 +279,7 @@ namespace Oxide.Plugins
                 ResearchTableMod rtm = sourceContainer.GetComponent<ResearchTableMod>();
                 if (player != null)
                 {
-                    NextTick(() => rtm?.ItemLoaded(player, sourceContainer.net.ID));
+                    NextTick(() => rtm?.ItemLoaded(player, (uint)sourceContainer.net.ID.Value));
                 }
             }
             else if (targetContainer != null && targetContainer is ResearchTable)
@@ -287,7 +288,7 @@ namespace Oxide.Plugins
                 ResearchTableMod rtm = targetContainer.GetComponent<ResearchTableMod>();
                 if (player != null)
                 {
-                    NextTick(() => rtm?.ItemLoaded(player, targetContainer.net.ID));
+                    NextTick(() => rtm?.ItemLoaded(player, (uint)targetContainer.net.ID.Value));
                 }
             }
             return null;
@@ -351,6 +352,8 @@ namespace Oxide.Plugins
             ConfigData config = new ConfigData()
             {
                 debug = false,
+                //currency = "researchpaper"
+                //currency = "ducttape"
                 currency = "scrap"
             };
 
@@ -421,7 +424,7 @@ namespace Oxide.Plugins
                         Effect.server.Run(table.researchFailEffect.resourcePath, parent, 0, Vector3.zero, Vector3.zero, null, false);
                         if (activePlayer != null)
                         {
-                            Instance.RsGUI(activePlayer, table.net.ID, null, true);
+                            Instance.RsGUI(activePlayer, (uint)table.net.ID.Value, null, true);
                         }
                     }
                     table?.inventory.GetSlot(1)?.RemoveFromContainer();
